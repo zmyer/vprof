@@ -1,4 +1,4 @@
-"""Module for Python profiler wrapper."""
+"""Profiler wrapper module."""
 import cProfile
 import operator
 import pstats
@@ -10,11 +10,12 @@ from vprof import base_profiler
 class Profiler(base_profiler.BaseProfiler):
     """Python profiler wrapper.
 
-    Runs cProfile against specified program and returns obtained stats.
+    Runs cProfile on specified program and returns collected stats.
     """
 
-    def _transform_stats(self, prof):
-        """Post-processes obtained stats for UI."""
+    @staticmethod
+    def _transform_stats(prof):
+        """Processes collected stats for UI."""
         records = []
         for info, params in prof.stats.items():
             filename, lineno, funcname = info
@@ -24,8 +25,6 @@ class Profiler(base_profiler.BaseProfiler):
             else:
                 percentage = round(100 * (cum_time / prof.total_tt), 4)
             cum_time = round(cum_time, 4)
-            funcname = funcname.replace('<', '[').replace('>', ']')
-            filename = filename.replace('<', '[').replace('>', ']')
             func_name = '%s @ %s' % (funcname, filename)
             color_hash = base_profiler.hash_name(func_name)
             records.append(
@@ -33,9 +32,8 @@ class Profiler(base_profiler.BaseProfiler):
                  cum_calls, time_per_call, filename, color_hash))
         return sorted(records, key=operator.itemgetter(4), reverse=True)
 
-    @base_profiler.run_in_another_process
-    def profile_package(self):
-        """Runs cProfile on package."""
+    def _profile_package(self):
+        """Runs cProfile on a package."""
         prof = cProfile.Profile()
         prof.enable()
         try:
@@ -53,9 +51,12 @@ class Profiler(base_profiler.BaseProfiler):
             'totalCalls': prof_stats.total_calls,
         }
 
-    @base_profiler.run_in_another_process
-    def profile_module(self):
-        """Runs cProfile on module."""
+    def profile_package(self):
+        """Runs package profiler in separate process."""
+        return base_profiler.run_in_separate_process(self._profile_package)
+
+    def _profile_module(self):
+        """Runs cProfile on a module."""
         prof = cProfile.Profile()
         try:
             with open(self._run_object, 'rb') as srcfile:
@@ -73,8 +74,12 @@ class Profiler(base_profiler.BaseProfiler):
             'totalCalls': prof_stats.total_calls,
         }
 
+    def profile_module(self):
+        """Runs module profiler in separate process."""
+        return base_profiler.run_in_separate_process(self._profile_module)
+
     def profile_function(self):
-        """Runs cProfile on function."""
+        """Runs cProfile on a function."""
         prof = cProfile.Profile()
         prof.enable()
         self._run_object(*self._run_args, **self._run_kwargs)

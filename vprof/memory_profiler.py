@@ -1,4 +1,4 @@
-"""Module for memory profiling."""
+"""Memory profiler module."""
 import gc
 import inspect
 import os
@@ -23,7 +23,7 @@ _BYTES_IN_MB = 1024 * 1024
 def _remove_duplicates(objects):
     """Removes duplicate objects.
 
-    Taken from http://www.peterbe.com/plog/uniqifiers-benchmark.
+    http://www.peterbe.com/plog/uniqifiers-benchmark.
     """
     seen, uniq = set(), []
     for obj in objects:
@@ -50,12 +50,6 @@ def _process_in_memory_objects(objects):
                               if not inspect.isframe(obj))
 
 
-def _get_memory_usage_for_process(pid):
-    """Returns memory usage for process specified by pid."""
-    memory_info = psutil.Process(pid).memory_info()
-    return memory_info.rss
-
-
 def _get_object_count_by_type(objects):
     """Counts Python objects by type."""
     return Counter(map(type, objects))
@@ -70,35 +64,34 @@ def _get_obj_count_difference(objs1, objs2):
     return obj_count_1 - obj_count_2
 
 
-def _format_obj_count(obj_count):
+def _format_obj_count(objects):
     """Formats object count."""
     result = []
     regex = re.compile(r'<(?P<type>\w+) \'(?P<name>\S+)\'>')
-    for obj_type, obj_count in obj_count.items():
+    for obj_type, obj_count in objects.items():
         if obj_count != 0:
             match = re.findall(regex, repr(obj_type))
-            _, name = match[0]
-            result.append((name, obj_count))
+            obj_type, obj_name = match[0]
+            result.append(("%s %s" % (obj_type, obj_name), obj_count))
     return sorted(result, key=operator.itemgetter(1), reverse=True)
 
 
 class _CodeEventsTracker(object):
     """Tracks specified events during code execution.
 
-    Class that contains all logic related to measuring memory usage after
-    specified events occur during Python program execution.
+    Contains all logic related to measuring memory usage.
     """
 
     def __init__(self):
         self._all_code = set()
         self._events_list = deque()
         self._original_trace_function = sys.gettrace()
-        self._pid = os.getpid()
+        self._process = psutil.Process(os.getpid())
         self._resulting_events = []
         self.mem_overhead = None
 
     def add_code(self, code):
-        """Recursively adds code to be examined."""
+        """Recursively adds code for profiling."""
         if code not in self._all_code:
             self._all_code.add(code)
             for subcode in filter(inspect.iscode, code.co_consts):
@@ -114,17 +107,16 @@ class _CodeEventsTracker(object):
         sys.settrace(self._original_trace_function)
 
     def _trace_memory_usage(self, frame, event, arg):  #pylint: disable=unused-argument
-        """Tracks memory usage when specified events occur."""
+        """Checks memory usage when 'line' event occur."""
         if event == 'line' and frame.f_code in self._all_code:
-            curr_memory = _get_memory_usage_for_process(self._pid)
             self._events_list.append(
-                (frame.f_lineno, curr_memory,
+                (frame.f_lineno, self._process.memory_info().rss,
                  frame.f_code.co_name, frame.f_code.co_filename))
         return self._trace_memory_usage
 
     @property
     def code_events(self):
-        """Returns processed code events."""
+        """Returns processed memory usage."""
         if self._resulting_events:
             return self._resulting_events
         for i, (lineno, mem, func, fname) in enumerate(self._events_list):
@@ -142,15 +134,15 @@ class _CodeEventsTracker(object):
 
     @property
     def obj_overhead(self):
-        """Returns all objects that are counted as profiler overhead.
-
+        """Returns all objects that are considered a profiler overhead.
         Objects are hardcoded for convenience.
         """
         overhead = [
             self,
             self._resulting_events,
             self._events_list,
-            self._all_code
+            self._all_code,
+            self._process
         ]
         overhead_count = _get_object_count_by_type(overhead)
         # One for reference to __dict__ and one for reference to
@@ -159,19 +151,19 @@ class _CodeEventsTracker(object):
         return overhead_count
 
     def compute_mem_overhead(self):
-        """Computes memory overhead at current time."""
-        self.mem_overhead = (_get_memory_usage_for_process(self._pid) -
+        """Returns memory overhead."""
+        self.mem_overhead = (self._process.memory_info().rss -
                              builtins.initial_rss_size)
 
 
 class MemoryProfiler(base_profiler.BaseProfiler):
     """Memory profiler wrapper.
 
-    Runs memory profiler and processes all obtained stats.
+    Runs memory profiler and processes collected stats.
     """
 
     def profile_package(self):
-        """Gets memory stats from package."""
+        """Returns memory stats for a package."""
         pkg_code = base_profiler.get_package_code(self._run_object)
         with _CodeEventsTracker() as prof:
             for _, compiled_code in pkg_code.values():
@@ -184,7 +176,7 @@ class MemoryProfiler(base_profiler.BaseProfiler):
         return prof
 
     def profile_module(self):
-        """Gets memory stats from module."""
+        """Returns memory stats for a module."""
         try:
             with open(self._run_object, 'rb') as srcfile,\
                 _CodeEventsTracker() as prof:
@@ -197,7 +189,7 @@ class MemoryProfiler(base_profiler.BaseProfiler):
         return prof
 
     def profile_function(self):
-        """Gets memory stats from function."""
+        """Returns memory stats for a function."""
         with _CodeEventsTracker() as prof:
             prof.add_code(self._run_object.__code__)
             prof.compute_mem_overhead()

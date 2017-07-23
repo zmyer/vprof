@@ -1,17 +1,17 @@
-"""Program stats server."""
+"""Profiler server."""
 import functools
 import gzip
-import json
 import io
+import json
 import os
 import sys
 import webbrowser
 
 from six import BytesIO
-from six.moves import socketserver
 from six.moves import SimpleHTTPServer as http_server
+from six.moves import socketserver
 
-_STATIC_DIR = 'frontend'
+_STATIC_DIR = 'ui'
 _PROFILE_HTML = '%s/profile.html' % _STATIC_DIR
 
 
@@ -23,7 +23,6 @@ def compress_data(data):
     """
     out_fileobj = BytesIO()
     with gzip.GzipFile(fileobj=out_fileobj, mode="w") as f:
-        # Convert to bytes for Python 3
         if sys.version_info[0] >= 3 and isinstance(data, str):
             f.write(bytes(data, 'utf-8'))
         else:
@@ -57,7 +56,8 @@ class StatsHandler(http_server.SimpleHTTPRequestHandler):
         http_server.SimpleHTTPRequestHandler.__init__(
             self, *args, **kwargs)
 
-    def _handle_root(self):
+    @staticmethod
+    def _handle_root():
         """Handles index.html requests."""
         res_filename = os.path.join(
             os.path.dirname(__file__), _PROFILE_HTML)
@@ -71,14 +71,12 @@ class StatsHandler(http_server.SimpleHTTPRequestHandler):
 
     def _handle_other(self):
         """Handles static files requests."""
-        res_basename = os.path.basename(self.path)
         res_filename = os.path.join(
-            os.path.dirname(__file__), _STATIC_DIR,
-            res_basename)
+            os.path.dirname(__file__), _STATIC_DIR, self.path[1:])
         with io.open(res_filename, 'rb') as res_file:
             content = res_file.read()
         _, extension = os.path.splitext(self.path)
-        return content, 'text/%s' % extension
+        return content, 'text/%s' % extension[1:]  # Skip dot in the extension.
 
     def do_GET(self):
         """Handles HTTP GET requests."""
@@ -110,17 +108,17 @@ class StatsHandler(http_server.SimpleHTTPRequestHandler):
             self.end_headers()
 
 
-def start(host, port, profile_stats, dont_start_browser, debug_mode):
+def start(host, port, profiler_stats, dont_start_browser, debug_mode):
     """Starts HTTP server with specified parameters.
 
     Args:
-        host: Server hostname.
+        host: Server host name.
         port: Server port.
-        profile_stats: Dict with collected progran stats.
-        dont_start_browser: Whether to start browser after profiling.
+        profiler_stats: A dict with collected program stats.
+        dont_start_browser: Whether to open browser after profiling.
         debug_mode: Whether to redirect stderr to /dev/null.
     """
-    stats_handler = functools.partial(StatsHandler, profile_stats)
+    stats_handler = functools.partial(StatsHandler, profiler_stats)
     if not debug_mode:
         sys.stderr = open(os.devnull, 'w')
     print('Starting HTTP server...')

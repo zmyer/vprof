@@ -78,7 +78,7 @@ class RunCleanCommand(cmd.Command):
 
     def run(self):
         subprocess.check_output(
-            shlex.split('rm -rf vprof/frontend/vprof_min.js'))
+            shlex.split('rm -rf vprof/ui/vprof_min.js'))
 
 
 class RunDepsInstallCommand(cmd.Command):
@@ -128,7 +128,7 @@ setup(
     url='http://github.com/nvdv/vprof',
     license='BSD',
     author='nvdv',
-    author_email='modestdev@gmail.com',
+    author_email='aflatnine@gmail.com',
     include_package_data=True,
     keywords=['debugging', 'profiling'],
     entry_points={

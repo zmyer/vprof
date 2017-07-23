@@ -1,33 +1,32 @@
 'use strict';
 
-var codeHeatmapModule = require('../code_heatmap.js');
+const codeHeatmapModule = require('../code_heatmap.js');
 
-describe('Code heatmap test suite', function() {
-  it('Check renderCode', function() {
-    codeHeatmapModule.CodeHeatmap.prototype.formatSrcLine_ = function(n, l, c) {
-      return n;
-    };
-    var data = {}, parent = {};
-    var calculator = new codeHeatmapModule.CodeHeatmap(parent, data);
+describe('Code heatmap test suite', () => {
+  it('Check renderCode', () => {
+    codeHeatmapModule.CodeHeatmap.prototype.formatSrcLine_ = (n, l, c) => n;
+    let data = {}, parent = {};
+    let calculator = new codeHeatmapModule.CodeHeatmap(parent, data);
 
-    var srcCode = [['line', 1, 'foo'], ['line', 2, 'bar'], ['line', 3, 'baz']];
-    var heatmap = {1: 0.1, 2: 0.2, 3: 0.2};
-    var executionCount = {1: 1, 2: 1, 3: 1};
-    var codeStats = {
+    let srcCode = [['line', 1, 'foo'], ['line', 2, 'bar'], ['line', 3, 'baz']];
+    let heatmap = {1: 0.1, 2: 0.2, 3: 0.2};
+    let executionCount = {1: 1, 2: 1, 3: 1};
+    let codeStats = {
       'srcCode': srcCode,
       'heatmap': heatmap,
       'executionCount': executionCount,
     };
 
-    var expectedResult = {
+    let expectedResult = {
       'srcCode': "123",
       'timeMap': {0: 0.1, 1: 0.2, 2: 0.2},
       'countMap': {0: 1, 1: 1, 2: 1}
     };
     expect(calculator.renderCode_(codeStats)).toEqual(expectedResult);
 
-    srcCode = [['line', 1, 'foo'], ['line', 2, 'bar'],
-               ['skip', 5], ['line', 8, 'hahaha']];
+    srcCode = [
+      ['line', 1, 'foo'], ['line', 2, 'bar'],
+      ['skip', 5], ['line', 8, 'hahaha']];
     heatmap = {1: 0.1, 2: 0.1, 8: 0.3};
     executionCount = {1: 1, 2: 1, 8: 1};
     codeStats = {

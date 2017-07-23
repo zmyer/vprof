@@ -1,4 +1,4 @@
-"""Module for statistical profiler."""
+"""Flame graph module."""
 import inspect
 import runpy
 import signal
@@ -35,9 +35,7 @@ class _StatProfiler(object):
         signal.setitimer(signal.ITIMER_PROF, 0)
 
     def sample(self, signum, frame):  #pylint: disable=unused-argument
-        """Samples current stack and stores result in self._stats.
-
-        Used as callback.
+        """Samples current stack and adds result in self._stats.
 
         Args:
             signum: Signal that activates handler.
@@ -53,15 +51,14 @@ class _StatProfiler(object):
         self._stats[tuple(stack)] += 1
         signal.setitimer(signal.ITIMER_PROF, _SAMPLE_INTERVAL)
 
-    def _insert_stack(self, stack, sample_count, call_tree):
+    @staticmethod
+    def _insert_stack(stack, sample_count, call_tree):
         """Inserts stack into the call tree.
 
-        Also creates all intermediate nodes in the call tree.
-
         Args:
-            stack: Call stack to be inserted.
-            sample_count: Sample count for call stack.
-            call_tree: Python dict representing the call tree.
+            stack: Call stack.
+            sample_count: Sample count of call stack.
+            call_tree: Call tree.
         """
         curr_level = call_tree
         for func in stack:
@@ -81,7 +78,8 @@ class _StatProfiler(object):
             self._fill_sample_count(child) for child in node['children'])
         return node['sampleCount']
 
-    def _get_percentage(self, sample_count, total_samples):
+    @staticmethod
+    def _get_percentage(sample_count, total_samples):
         """Return percentage of sample_count in total_samples."""
         if total_samples != 0:
             return 100 * round(float(sample_count) / total_samples, 3)
@@ -90,8 +88,6 @@ class _StatProfiler(object):
     def _format_tree(self, node, total_samples):
         """Reformats call tree for the UI."""
         funcname, filename, _ = node['stack']
-        funcname = funcname.replace('<', '[').replace('>', ']')
-        filename = filename.replace('<', '[').replace('>', ']')
         sample_percent = self._get_percentage(
             node['sampleCount'], total_samples)
         color_hash = base_profiler.hash_name('%s @ %s' % (funcname, filename))
@@ -106,7 +102,7 @@ class _StatProfiler(object):
 
     @property
     def call_tree(self):
-        """Returns call tree from statistical profiler."""
+        """Returns call tree."""
         call_tree = {'stack': 'base', 'sampleCount': 0, 'children': []}
         for stack, sample_count in self._stats.items():
             self._insert_stack(reversed(stack), sample_count, call_tree)
@@ -118,15 +114,15 @@ class _StatProfiler(object):
 
 
 class FlameGraphProfiler(base_profiler.BaseProfiler):
-    """Flame graph profiler wrapper.
+    """Statistical profiler wrapper.
 
-    Runs statistical profiler and returns obtained stats.
+    Runs statistical profiler and returns collected stats.
     """
 
-    @base_profiler.run_in_another_process
-    def profile_package(self):
-        """Runs statistical profiler on packages."""
+    def _profile_package(self):
+        """Runs statistical profiler on a package."""
         with _StatProfiler() as prof:
+            prof.base_frame = inspect.currentframe()
             try:
                 runpy.run_path(self._run_object, run_name='__main__')
             except SystemExit:
@@ -138,12 +134,15 @@ class FlameGraphProfiler(base_profiler.BaseProfiler):
             'sampleInterval': _SAMPLE_INTERVAL,
             'runTime': prof.run_time,
             'callStats': call_tree,
-            'totalSamples': call_tree.get('sampleCount') or 0
+            'totalSamples': call_tree.get('sampleCount', 0)
         }
 
-    @base_profiler.run_in_another_process
-    def profile_module(self):
-        """Runs statistical profiler on module."""
+    def profile_package(self):
+        """Runs package profiler in separate process."""
+        return base_profiler.run_in_separate_process(self._profile_package)
+
+    def _profile_module(self):
+        """Runs statistical profiler on a module."""
         with open(self._run_object, 'rb') as srcfile, _StatProfiler() as prof:
             code = compile(srcfile.read(), self._run_object, 'exec')
             prof.base_frame = inspect.currentframe()
@@ -158,11 +157,15 @@ class FlameGraphProfiler(base_profiler.BaseProfiler):
             'sampleInterval': _SAMPLE_INTERVAL,
             'runTime': prof.run_time,
             'callStats': call_tree,
-            'totalSamples': call_tree.get('sampleCount') or 0
+            'totalSamples': call_tree.get('sampleCount', 0)
         }
 
+    def profile_module(self):
+        """Runs module profiler in separate process."""
+        return base_profiler.run_in_separate_process(self._profile_module)
+
     def profile_function(self):
-        """Runs statistical profiler on function."""
+        """Runs statistical profiler on a function."""
         with _StatProfiler() as prof:
             self._run_object(*self._run_args, **self._run_kwargs)
 
@@ -172,5 +175,5 @@ class FlameGraphProfiler(base_profiler.BaseProfiler):
             'sampleInterval': _SAMPLE_INTERVAL,
             'runTime': prof.run_time,
             'callStats': call_tree,
-            'totalSamples': call_tree.get('sampleCount') or 0
+            'totalSamples': call_tree.get('sampleCount', 0)
         }

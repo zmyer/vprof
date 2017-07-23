@@ -5,8 +5,6 @@
 }
 
 .memory-usage-graph {
-  padding-left: 10px;
-  padding-right: 10px;
   width: 70%;
 }
 
@@ -81,4 +79,3 @@
   stroke: #E6550D;
   stroke-dasharray: 4;
 }
-
